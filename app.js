@@ -15,51 +15,46 @@ const User = require("./db/userModel");
 // Importing encryption
 const bcrypt = require("bcrypt");
 
+//for creating token
+const jwt = require("jsonwebtoken");
+
 //login endpoint
 app.post("/login", async (req, res) => {
-  //Checking if email and password is present
-  if (!req.body.email || !req.body.password) {
-    return res.status(500).send({
-      message: "Please provide both credentials!",
-    });
-  }
-
-  //Checking if email is present
   try {
+    // Check if both email and password are provided
+    if (!req.body.email || !req.body.password) {
+      return res.status(400).json({ message: "Please provide both email and password" });
+    }
+
+    // Check if user with given email exists
     const user = await User.findOne({ email: req.body.email });
     if (!user) {
-      return res.status(400).send({
-        message: "Email does not exist!",
-      });
+      return res.status(404).json({ message: "Email not found" });
     }
 
-    //If user exists, comparing the password with hashed password
-    try {
-      const checkPassword = await bcrypt.compare(
-        req.body.password,
-        user.password
-      );
-      if (!checkPassword) {
-        return res.status(500).send({
-          message: "Wrong password",
-        });
-      }
-
-      console.log("Login successfull");
-      return res.status(201).send({
-        message: "Login successfull",
-      });
-    } catch (error) {
-      res.status(500).send({
-        message: "Try again",
-        error,
-      });
+    // Compare the provided password with the stored hashed password
+    const isPasswordValid = await bcrypt.compare(req.body.password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Invalid password" });
     }
-  } catch (error) {
-    res.status(500).send({
-      message: "Server error",
-      error,
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id, userEmail: user.email },
+      process.env.JWT_SECRET || "defaultSecret",
+      { expiresIn: "24h" }
+    );
+
+    // Successful login response
+    res.status(200).json({
+      message: "Login successful",
+      email: user.email,
+      token,
     });
+
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
